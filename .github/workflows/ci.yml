@@ -15,7 +15,7 @@ jobs:
             cargo_cmd: fmt -- --check
             os: ubuntu-latest
           - component: clippy
-            cargo_cmd: clippy --locked --all-targets -- -D warnings -A clippy::type_complexity -A clippy::new-without-default
+            cargo_cmd: clippy --all-targets -- -D warnings -A clippy::type_complexity -A clippy::new-without-default
     steps:
       - name: Clone repository
         uses: actions/checkout@v1
@@ -59,7 +59,7 @@ jobs:
           toolchain: ${{ matrix.rustc }}
 
       - name: Build tests
-        run: cargo test --no-run --locked --all-targets --verbose ${{ matrix.extra_args }}
+        run: cargo test --no-run --all-targets --verbose ${{ matrix.extra_args }}
 
       - name: Run tests
-        run: cargo test --locked --all-targets --verbose ${{ matrix.extra_args }}
+        run: cargo test --all-targets --verbose ${{ matrix.extra_args }}
