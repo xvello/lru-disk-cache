@@ -1,0 +1,17 @@
+[package]
+name = "lru-disk-cache"
+version = "0.5.0"
+authors = ["Xavier Vello <xavier.vello@gmail.com>", "Ted Mielczarek <ted@mielczarek.org>"]
+license = "Apache-2.0"
+description = "A LRU cache for files on disk"
+repository = "https://github.com/xvello/lru-disk-cache"
+edition = "2018"
+
+[dependencies]
+filetime = "0.2.13"
+linked-hash-map = "0.5.4"
+log = "0.4"
+walkdir = "2.3.1"
+
+[dev-dependencies]
+tempfile = "3"
