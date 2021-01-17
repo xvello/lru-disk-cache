@@ -2,9 +2,11 @@
 
 #[macro_use]
 extern crate log;
-//extern crate lru_cache;
-pub mod lru_cache;
 
+mod lru_cache;
+
+use crate::lru_cache::{LruCache, Meter};
+use filetime::{set_file_times, FileTime};
 use std::borrow::Borrow;
 use std::boxed::Box;
 use std::collections::hash_map::RandomState;
@@ -16,9 +18,6 @@ use std::hash::BuildHasher;
 use std::io;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
-
-pub use crate::lru_cache::{LruCache, Meter};
-use filetime::{set_file_times, FileTime};
 use walkdir::WalkDir;
 
 struct FileSize;
