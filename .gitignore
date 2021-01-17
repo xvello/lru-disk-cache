@@ -1,13 +1,3 @@
 target
 *~
 
-*.log
-.cargo
-*.pyc
-
-# snapcraft artifacts
-/parts
-/prime
-/snap/.snapcraft
-/stage
-/*.snap
