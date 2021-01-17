@@ -245,12 +245,12 @@ impl LruDiskCache {
     }
 
     /// Add a file by calling `with` with the open `File` corresponding to the cache at path `key`.
-    pub fn insert_with<K: AsRef<OsStr>, F: FnOnce(File) -> io::Result<()>>(
+    pub fn insert_with<K: AsRef<OsStr>, F: FnOnce(&mut dyn Write) -> io::Result<()>>(
         &mut self,
         key: K,
         with: F,
     ) -> Result<()> {
-        self.insert_by(key, None, |path| with(File::create(&path)?))
+        self.insert_by(key, None, |path| with(&mut File::create(&path)?))
     }
 
     /// Add a file with `bytes` as its contents to the cache at path `key`.
@@ -262,8 +262,8 @@ impl LruDiskCache {
         })
     }
 
-    /// Add an existing file at `path` to the cache at path `key`.
-    pub fn insert_file<K: AsRef<OsStr>, P: AsRef<OsStr>>(&mut self, key: K, path: P) -> Result<()> {
+    /// Move an existing file at `path` into the cache at path `key`.
+    pub fn take_file<K: AsRef<OsStr>, P: AsRef<OsStr>>(&mut self, key: K, path: P) -> Result<()> {
         let size = fs::metadata(path.as_ref())?.len();
         self.insert_by(key, Some(size), |new_path| {
             fs::rename(path.as_ref(), new_path).or_else(|_| {
@@ -282,9 +282,9 @@ impl LruDiskCache {
         self.lru.contains_key(key.as_ref())
     }
 
-    /// Get an opened `File` for `key`, if one exists and can be opened. Updates the LRU state
-    /// of the file if present. Avoid using this method if at all possible, prefer `.get`.
-    pub fn get_file<K: AsRef<OsStr>>(&mut self, key: K) -> Result<File> {
+    /// Get an opened readable and seekable handle to the file at `key`, if one exists and can
+    /// be opened. Updates the LRU state of the file if present.
+    pub fn get<K: AsRef<OsStr>>(&mut self, key: K) -> Result<Box<dyn ReadSeek>> {
         let rel_path = key.as_ref();
         let path = self.rel_to_abs_path(rel_path);
         self.lru
@@ -295,12 +295,7 @@ impl LruDiskCache {
                 set_file_times(&path, t, t)?;
                 File::open(path).map_err(Into::into)
             })
-    }
-
-    /// Get an opened readable and seekable handle to the file at `key`, if one exists and can
-    /// be opened. Updates the LRU state of the file if present.
-    pub fn get<K: AsRef<OsStr>>(&mut self, key: K) -> Result<Box<dyn ReadSeek>> {
-        self.get_file(key).map(|f| Box::new(f) as Box<dyn ReadSeek>)
+            .map(|f| Box::new(f) as Box<dyn ReadSeek>)
     }
 
     /// Remove the given key from the cache.
@@ -448,6 +443,17 @@ mod tests {
     }
 
     #[test]
+    fn test_insert_with() {
+        let f = TestFixture::new();
+        let mut c = LruDiskCache::new(f.tmp(), 25).unwrap();
+
+        c.insert_with("a/b/c", |sink| write!(sink, "testing"))
+            .unwrap();
+        assert!(c.contains_key("a/b/c"));
+        assert_eq!(read_all(&mut c.get("a/b/c").unwrap()).unwrap(), b"testing");
+    }
+
+    #[test]
     fn test_insert_bytes_exact() {
         // Test that files adding up to exactly the size limit works.
         let f = TestFixture::new();
@@ -520,9 +526,9 @@ mod tests {
         let p2 = f.create_file("file2", 10);
         let p3 = f.create_file("file3", 10);
         let mut c = LruDiskCache::new(f.tmp().join("cache"), 25).unwrap();
-        c.insert_file("file1", &p1).unwrap();
+        c.take_file("file1", &p1).unwrap();
         assert_eq!(c.len(), 1);
-        c.insert_file("file2", &p2).unwrap();
+        c.take_file("file2", &p2).unwrap();
         assert_eq!(c.len(), 2);
         // Get the file to bump its LRU status.
         assert_eq!(
@@ -530,7 +536,7 @@ mod tests {
             vec![0u8; 10]
         );
         // Adding this third file should put the cache above the limit.
-        c.insert_file("file3", &p3).unwrap();
+        c.take_file("file3", &p3).unwrap();
         assert_eq!(c.len(), 2);
         assert_eq!(c.size(), 20);
         // The least-recently-used file should have been removed.
@@ -547,10 +553,10 @@ mod tests {
         let p2 = f.create_file("file2", 10);
         let p3 = f.create_file("file3", 10);
         let mut c = LruDiskCache::new(f.tmp().join("cache"), 25).unwrap();
-        c.insert_file("file1", &p1).unwrap();
-        c.insert_file("file2", &p2).unwrap();
+        c.take_file("file1", &p1).unwrap();
+        c.take_file("file2", &p2).unwrap();
         c.remove("file1").unwrap();
-        c.insert_file("file3", &p3).unwrap();
+        c.take_file("file3", &p3).unwrap();
         assert_eq!(c.len(), 2);
         assert_eq!(c.size(), 20);
 
@@ -564,7 +570,7 @@ mod tests {
         assert!(!p3.exists());
 
         let p4 = f.create_file("file1", 10);
-        c.insert_file("file1", &p4).unwrap();
+        c.take_file("file1", &p4).unwrap();
         assert_eq!(c.len(), 2);
         // file2 should have been removed.
         assert!(c.contains_key("file1"));
